@@ -2,7 +2,8 @@ package Mail::DMARC::Report::Send::HTTP;
 use strict;
 use warnings;
 use feature 'signatures';
-no warnings 'experimental::args_array_with_signatures';    ## no critic (ProhibitNoWarnings)
+no if $] >= 5.036, warnings => 'experimental::args_array_with_signatures';    ## no critic (ProhibitNoWarnings)
+no if $] < 5.036,  warnings => 'experimental::signatures';                    ## no critic (ProhibitNoWarnings)
 
 our $VERSION = '2.20260621';
 

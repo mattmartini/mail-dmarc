@@ -2,7 +2,8 @@ package Mail::DMARC;
 use strict;
 use warnings;
 use feature 'signatures';
-no warnings 'experimental::args_array_with_signatures';    ## no critic (ProhibitNoWarnings)
+no if $] >= 5.036, warnings => 'experimental::args_array_with_signatures';    ## no critic (ProhibitNoWarnings)
+no if $] < 5.036,  warnings => 'experimental::signatures';                    ## no critic (ProhibitNoWarnings)
 
 our $VERSION = '2.20260621';
 
@@ -16,20 +17,17 @@ require Mail::DMARC::Result;
 require Mail::DMARC::Report::Aggregate::Record::Auth_Results::SPF;
 require Mail::DMARC::Report::Aggregate::Record::Auth_Results::DKIM;
 
-sub new( $class, @args ) {
+sub new($class, @args) {
     croak "invalid args" if @args % 2;
     my %args = @args;
     my $self = bless { config_file => 'mail-dmarc.ini', }, $class;
 
-    my @keys = sort {
-              $a eq 'config_file' ? -1
-            : $b eq 'config_file' ? 1
-            : ( $a cmp $b )
-    } keys %args;
+    my @keys = sort { $a eq 'config_file' ? -1 : $b eq 'config_file' ? 1 : ($a cmp $b) }
+        keys %args;
 
     foreach my $key (@keys) {
-        if ( $self->can($key) ) {
-            $self->$key( $args{$key} );
+        if ($self->can($key)) {
+            $self->$key($args{$key});
         }
         else {
             $self->{$key} = $args{$key};
@@ -38,75 +36,74 @@ sub new( $class, @args ) {
     return $self;
 }
 
-sub source_ip( $self, $val = undef ) {
+sub source_ip($self, $val = undef) {
     return $self->{source_ip} if @_ == 1;
     croak "invalid source_ip" if !$self->is_valid_ip($val);
     return $self->{source_ip} = $val;
 }
 
-sub envelope_to( $self, $val = undef ) {
+sub envelope_to($self, $val = undef) {
     return $self->{envelope_to} if @_ == 1;
-    croak "invalid envelope_to" if !$self->is_valid_domain( lc $val );
+    croak "invalid envelope_to" if !$self->is_valid_domain(lc $val);
     return $self->{envelope_to} = $val;
 }
 
-sub envelope_from( $self, $val = undef ) {
+sub envelope_from($self, $val = undef) {
     return $self->{envelope_from} if @_ == 1;
-    croak "invalid envelope_from" if !$self->is_valid_domain( lc $val );
+    croak "invalid envelope_from" if !$self->is_valid_domain(lc $val);
     return $self->{envelope_from} = $val;
 }
 
-sub header_from( $self, $val = undef ) {
+sub header_from($self, $val = undef) {
     return $self->{header_from} if @_ == 1;
-    croak "invalid header_from" if !$self->is_valid_domain( lc $val );
+    croak "invalid header_from" if !$self->is_valid_domain(lc $val);
     return $self->{header_from} = lc $val;
 }
 
-sub header_from_raw( $self, $val = undef ) {
+sub header_from_raw($self, $val = undef) {
     return $self->{header_from_raw} if @_ == 1;
 
     #croak "invalid header_from_raw: $val" if 'from:' ne lc substr($val, 0, 5);
     return $self->{header_from_raw} = lc $val;
 }
 
-sub sender( $self, $val = undef ) {
+sub sender($self, $val = undef) {
     return $self->{sender} if @_ == 1;
-    croak "invalid sender" if !$self->is_valid_domain( lc $val );
+    croak "invalid sender" if !$self->is_valid_domain(lc $val);
     return $self->{sender} = lc $val;
 }
 
-sub local_policy( $self, $val = undef ) {
+sub local_policy($self, $val = undef) {
     return $self->{local_policy} if @_ == 1;
 
     # TODO: document this, when and why it would be used
     return $self->{local_policy} = $val;
 }
 
-sub dkim( $self, @args ) {
-    if ( !@args ) {
+sub dkim($self, @args) {
+    if (!@args) {
         $self->_unwrap('dkim');
         return $self->{dkim};
     }
 
     # one shot
-    if ( @args == 1 ) {
+    if (@args == 1) {
 
         # warn "one argument\n";
-        if ( ref $args[0] eq 'CODE' ) {
+        if (ref $args[0] eq 'CODE') {
             return $self->{dkim} = $args[0];
         }
 
-        if ( ref $args[0] eq 'ARRAY' ) {
-            foreach my $d ( @{ $args[0] } ) {
+        if (ref $args[0] eq 'ARRAY') {
+            foreach my $d (@{ $args[0] }) {
                 push @{ $self->{dkim} },
-                    Mail::DMARC::Report::Aggregate::Record::Auth_Results::DKIM
-                    ->new($d);
+                    Mail::DMARC::Report::Aggregate::Record::Auth_Results::DKIM->new($d);
             }
             return $self->{dkim};
         }
 
-        if ( ref $args[0] eq 'Mail::DKIM::Verifier' ) {
-            $self->_from_mail_dkim( $args[0] );
+        if (ref $args[0] eq 'Mail::DKIM::Verifier') {
+            $self->_from_mail_dkim($args[0]);
             return $self->{dkim};
         }
     }
@@ -118,17 +115,17 @@ sub dkim( $self, @args ) {
     return $self->{dkim};
 }
 
-sub _from_mail_dkim( $self, $dkim ) {
+sub _from_mail_dkim($self, $dkim) {
     my $signatures = 0;
 
     # A DKIM verifier will have result and signature methods.
-    foreach my $s ( $dkim->signatures ) {
+    foreach my $s ($dkim->signatures) {
         next if ref $s eq 'Mail::DKIM::DkSignature';
         $signatures++;
 
         my $result = $s->result;
 
-        if ( $result eq 'invalid' ) {    # See GH Issue #21
+        if ($result eq 'invalid') {    # See GH Issue #21
             $result = 'temperror';
         }
 
@@ -141,7 +138,7 @@ sub _from_mail_dkim( $self, $dkim ) {
             );
     }
 
-    if ( $signatures < 1 ) {
+    if ($signatures < 1) {
         push @{ $self->{dkim} },
             Mail::DMARC::Report::Aggregate::Record::Auth_Results::DKIM->new(
             domain => '',
@@ -152,28 +149,28 @@ sub _from_mail_dkim( $self, $dkim ) {
     return;
 }
 
-sub _unwrap( $self, $key ) {
-    if ( $self->{$key} and ref $self->{$key} eq 'CODE' ) {
+sub _unwrap($self, $key) {
+    if ($self->{$key} and ref $self->{$key} eq 'CODE') {
         my $code = delete $self->{$key};
-        $self->$key( $self->$code );
+        $self->$key($self->$code);
     }
     return;
 }
 
-sub spf( $self, @args ) {
-    if ( !@args ) {
+sub spf($self, @args) {
+    if (!@args) {
         $self->_unwrap('spf');
         return $self->{spf};
     }
 
-    if ( @args == 1 && ref $args[0] eq 'CODE' ) {
+    if (@args == 1 && ref $args[0] eq 'CODE') {
         return $self->{spf} = $args[0];
     }
 
-    if ( @args == 1 && ref $args[0] eq 'ARRAY' ) {
+    if (@args == 1 && ref $args[0] eq 'ARRAY') {
 
         # warn "SPF one shot";
-        foreach my $d ( @{ $args[0] } ) {
+        foreach my $d (@{ $args[0] }) {
             push @{ $self->{spf} },
                 Mail::DMARC::Report::Aggregate::Record::Auth_Results::SPF->new($d);
         }
@@ -187,7 +184,7 @@ sub spf( $self, @args ) {
     return $self->{spf};
 }
 
-sub policy( $self, @args ) {
+sub policy($self, @args) {
     return $self->{policy} if ref $self->{policy} && !@args;
     return $self->{policy} = Mail::DMARC::Policy->new(@args);
 }
@@ -202,13 +199,13 @@ sub result($self) {
     return $self->{result} = Mail::DMARC::Result->new();
 }
 
-sub is_subdomain( $self, $val = undef ) {
+sub is_subdomain($self, $val = undef) {
     return $self->{is_subdomain} if @_ == 1;
     croak "invalid boolean"      if 0 == grep {/^$val$/ix} qw/ 0 1/;
     return $self->{is_subdomain} = $val;
 }
 
-sub get_report_window( $self, $interval = undef, $now = undef ) {
+sub get_report_window($self, $interval = undef, $now = undef) {
     my $min_interval = $self->config->{'report_sending'}{'min_interval'};
     my $max_interval = $self->config->{'report_sending'}{'max_interval'};
 
@@ -220,26 +217,26 @@ sub get_report_window( $self, $interval = undef, $now = undef ) {
         $interval = $max_interval if $interval > $max_interval;
     }
 
-    if ( ( 86400 % $interval ) != 0 ) {
+    if ((86400 % $interval) != 0) {
 
         # Interval does not fit into a day nicely,
         # So don't work out a window, just run with it.
-        return ( $now, $now + $interval - 1 );
+        return ($now, $now + $interval - 1);
     }
 
     my $begin = $self->get_start_of_zulu_day($now);
     my $end   = $begin + $interval - 1;
 
-    while ( $end < $now ) {
+    while ($end < $now) {
         $begin = $begin + $interval;
         $end   = $begin + $interval - 1;
     }
 
-    return ( $begin, $end );
+    return ($begin, $end);
 }
 
-sub get_start_of_zulu_day( $self, $t ) {
-    my $start_of_zulu_day = $t - ( $t % 86400 );
+sub get_start_of_zulu_day($self, $t) {
+    my $start_of_zulu_day = $t - ($t % 86400);
     return $start_of_zulu_day;
 }
 
@@ -248,19 +245,19 @@ sub save_aggregate($self) {
 
     # put config information in report metadata
     foreach my $f (qw/ org_name email extra_contact_info report_id /) {
-        $agg->metadata->$f( $self->config->{organization}{$f} );
+        $agg->metadata->$f($self->config->{organization}{$f});
     }
 
-    my ( $begin, $end )
-        = $self->get_report_window( $self->result->published->ri, $self->time );
+    my ($begin, $end)
+        = $self->get_report_window($self->result->published->ri, $self->time);
 
     $agg->metadata->begin($begin);
     $agg->metadata->end($end);
 
-    $agg->policy_published( $self->result->published );
+    $agg->policy_published($self->result->published);
 
     my $rec = Mail::DMARC::Report::Aggregate::Record->new();
-    $rec->row->source_ip( $self->source_ip );
+    $rec->row->source_ip($self->source_ip);
 
     $rec->identifiers(
         envelope_to   => $self->envelope_to,
@@ -268,8 +265,8 @@ sub save_aggregate($self) {
         header_from   => $self->header_from,
     );
 
-    $rec->auth_results->dkim( $self->dkim );
-    $rec->auth_results->spf( $self->spf );
+    $rec->auth_results->dkim($self->dkim);
+    $rec->auth_results->spf($self->spf);
 
     $rec->row->policy_evaluated(
         disposition => $self->result->disposition,
